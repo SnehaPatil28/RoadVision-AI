@@ -1,1 +1,26 @@
+# Dataset
+dataset/
 Dataset/
+RDD2020/
+road_damage/
+*.tar.gz
+*.zip
+
+# YOLO trained models
+*.pt
+*.onnx
+
+# Python
+__pycache__/
+*.pyc
+
+# Colab
+.ipynb_checkpoints/
+
+# Environment
+.env
+venv/
+.venv/
+
+# Results/cache
+runs/
