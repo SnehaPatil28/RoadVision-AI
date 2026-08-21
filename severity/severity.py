@@ -1,170 +1,251 @@
 def calculate_severity(
     bbox,
     image_width,
-    image_height,
-    confidence,
-    damage_type
+    image_height
 ):
     """
-    Calculate damage severity based on
-    bounding-box coverage and confidence.
+    Calculate severity based on the percentage
+    of image area covered by the detected damage.
+
+    Returns:
+        severity: LOW / MEDIUM / HIGH
+        coverage: percentage of image covered by damage
     """
 
     x1, y1, x2, y2 = bbox
 
-    # Calculate bounding-box dimensions
-    box_width = max(0, x2 - x1)
-    box_height = max(0, y2 - y1)
 
-    # Calculate damage area
-    damage_area = box_width * box_height
+    # ========================================================
+    # BOUNDING BOX DIMENSIONS
+    # ========================================================
 
-    # Calculate total image area
-    image_area = image_width * image_height
+    box_width = max(
+        0,
+        x2 - x1
+    )
 
-    # Calculate percentage of image covered by damage
-    coverage = (damage_area / image_area) * 100
+    box_height = max(
+        0,
+        y2 - y1
+    )
 
-    # Determine severity
-    if coverage < 1:
+
+    # ========================================================
+    # AREA CALCULATION
+    # ========================================================
+
+    box_area = (
+        box_width * box_height
+    )
+
+    image_area = (
+        image_width * image_height
+    )
+
+
+    # ========================================================
+    # SAFETY CHECK
+    # ========================================================
+
+    if image_area == 0:
+
+        return "LOW", 0.0
+
+
+    # ========================================================
+    # DAMAGE COVERAGE
+    # ========================================================
+
+    coverage = (
+        box_area / image_area
+    ) * 100
+
+
+    # ========================================================
+    # SEVERITY CLASSIFICATION
+    # ========================================================
+
+    if coverage < 5:
+
         severity = "LOW"
 
-    elif coverage < 5:
+    elif coverage < 15:
+
         severity = "MEDIUM"
 
     else:
+
         severity = "HIGH"
 
-    return {
-        "damage_type": damage_type,
-        "confidence": round(confidence, 3),
-        "coverage_percent": round(coverage, 3),
-        "severity": severity
-    }
+
+    return severity, coverage
 
 
-def detect_and_classify(
-    image_path,
-    model,
-    confidence_threshold=0.25
+# ============================================================
+# ROAD CONDITION SCORE
+# ============================================================
+
+def calculate_road_condition_score(
+    detections
 ):
     """
-    Run YOLO detection and classify
-    each detected damage by severity.
+    Calculate overall road condition score.
+
+    Score:
+        100 = Excellent
+        0   = Very Poor
+
+    The score considers:
+        - Severity
+        - Detection confidence
+        - Damage coverage
+
+    detections must be a list of dictionaries.
     """
 
-    results = model.predict(
-        source=image_path,
-        conf=confidence_threshold,
-        verbose=False
-    )
 
-    result = results[0]
-
-    # Get original image dimensions
-    image_height, image_width = result.orig_shape
-
-    detections = []
-
-    # No detections
-    if result.boxes is None or len(result.boxes) == 0:
-        return detections
-
-    # Process every detection
-    for box in result.boxes:
-
-        # Get class ID
-        class_id = int(
-            box.cls[0].item()
-        )
-
-        # Get damage class name
-        damage_type = model.names[class_id]
-
-        # Get confidence
-        confidence = float(
-            box.conf[0].item()
-        )
-
-        # Get bounding box
-        bbox = box.xyxy[0].cpu().numpy()
-
-        # Calculate severity
-        severity_result = calculate_severity(
-            bbox=bbox,
-            image_width=image_width,
-            image_height=image_height,
-            confidence=confidence,
-            damage_type=damage_type
-        )
-
-        # Add bounding box to result
-        severity_result["bbox"] = [
-            round(float(x), 2)
-            for x in bbox
-        ]
-
-        detections.append(severity_result)
-
-    return detections
-
-
-def calculate_road_condition_score(detections):
-    """
-    Calculate overall road condition score
-    from 0 to 100.
-
-    Higher score = better road condition.
-    """
+    # ========================================================
+    # NO DAMAGE
+    # ========================================================
 
     if not detections:
-        return 100
 
-    severity_points = {
-        "LOW": 10,
-        "MEDIUM": 25,
-        "HIGH": 50
+        return 100.0
+
+
+    # ========================================================
+    # SEVERITY PENALTIES
+    # ========================================================
+
+    severity_penalty = {
+
+        "LOW": 5,
+
+        "MEDIUM": 15,
+
+        "HIGH": 30
+
     }
 
-    total_penalty = 0
+
+    total_penalty = 0.0
+
+
+    # ========================================================
+    # PROCESS EACH DETECTION
+    # ========================================================
 
     for detection in detections:
 
+
+        # ----------------------------------------------------
+        # Get detection information
+        # ----------------------------------------------------
+
         severity = detection["severity"]
+
+        coverage = detection["coverage"]
+
         confidence = detection["confidence"]
 
-        penalty = (
-            severity_points[severity]
-            * confidence
+
+        # ----------------------------------------------------
+        # Base severity penalty
+        # ----------------------------------------------------
+
+        base_penalty = severity_penalty.get(
+            severity,
+            0
         )
+
+
+        # ----------------------------------------------------
+        # Confidence-weighted penalty
+        # ----------------------------------------------------
+
+        confidence_penalty = (
+            base_penalty * confidence
+        )
+
+
+        # ----------------------------------------------------
+        # Coverage penalty
+        # ----------------------------------------------------
+
+        coverage_penalty = (
+            coverage * 0.5
+        )
+
+
+        # ----------------------------------------------------
+        # Total penalty
+        # ----------------------------------------------------
+
+        penalty = (
+            confidence_penalty
+            + coverage_penalty
+        )
+
 
         total_penalty += penalty
 
-    # Maximum penalty is 100
-    total_penalty = min(
-        total_penalty,
-        100
+
+    # ========================================================
+    # CALCULATE FINAL SCORE
+    # ========================================================
+
+    score = (
+        100 - total_penalty
     )
 
-    score = 100 - total_penalty
 
-    return round(score, 2)
+    # ========================================================
+    # KEEP SCORE BETWEEN 0 AND 100
+    # ========================================================
+
+    score = max(
+        0,
+        min(
+            100,
+            score
+        )
+    )
 
 
-def get_road_condition(score):
+    return round(
+        score,
+        2
+    )
+
+
+# ============================================================
+# ROAD CONDITION CATEGORY
+# ============================================================
+
+def get_road_condition(
+    score
+):
     """
-    Convert numerical road score
-    into a condition label.
+    Convert numerical score into a readable
+    road-condition category.
     """
 
     if score >= 80:
-        return "GOOD"
+
+        return "Excellent"
 
     elif score >= 60:
-        return "MODERATE"
+
+        return "Good"
 
     elif score >= 40:
-        return "POOR"
+
+        return "Moderate"
+
+    elif score >= 20:
+
+        return "Poor"
 
     else:
-        return "CRITICAL"
+
+        return "Very Poor"
