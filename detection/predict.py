@@ -75,7 +75,7 @@ results = model.predict(
     source=[str(image) for image in image_files],
 
     # Confidence threshold
-    conf=0.25,
+    conf=0.20,
 
     # Save annotated images
     save=True,
@@ -112,7 +112,6 @@ for image_path, result in zip(image_files, results):
 
     print("=" * 70)
 
-
     # --------------------------------------------------------
     # Image dimensions
     # --------------------------------------------------------
@@ -123,7 +122,6 @@ for image_path, result in zip(image_files, results):
         f"\nImage dimensions: "
         f"{image_width} x {image_height}"
     )
-
 
     # --------------------------------------------------------
     # No detections
@@ -165,7 +163,6 @@ for image_path, result in zip(image_files, results):
 
         continue
 
-
     # --------------------------------------------------------
     # Process detections
     # --------------------------------------------------------
@@ -175,9 +172,7 @@ for image_path, result in zip(image_files, results):
         f"{len(result.boxes)}"
     )
 
-
     detections = []
-
 
     for i, box in enumerate(
         result.boxes,
@@ -192,7 +187,6 @@ for image_path, result in zip(image_files, results):
             box.cls[0].item()
         )
 
-
         # ----------------------------------------------------
         # Confidence
         # ----------------------------------------------------
@@ -200,7 +194,6 @@ for image_path, result in zip(image_files, results):
         confidence = float(
             box.conf[0].item()
         )
-
 
         # ----------------------------------------------------
         # Bounding box
@@ -217,13 +210,11 @@ for image_path, result in zip(image_files, results):
             for x in bbox
         ]
 
-
         # ----------------------------------------------------
         # Damage type
         # ----------------------------------------------------
 
         damage_type = model.names[class_id]
-
 
         # ----------------------------------------------------
         # Calculate severity
@@ -231,14 +222,17 @@ for image_path, result in zip(image_files, results):
 
         severity, coverage = calculate_severity(
 
+            damage_type,
+
             bbox,
 
             image_width,
 
-            image_height
+            image_height,
+
+            confidence
 
         )
-
 
         # ----------------------------------------------------
         # Create detection dictionary
@@ -267,7 +261,6 @@ for image_path, result in zip(image_files, results):
 
         }
 
-
         # ----------------------------------------------------
         # Store detection
         # ----------------------------------------------------
@@ -275,7 +268,6 @@ for image_path, result in zip(image_files, results):
         detections.append(
             detection
         )
-
 
     # ========================================================
     # ROAD CONDITION SCORE
@@ -289,7 +281,6 @@ for image_path, result in zip(image_files, results):
         detections
     )
 
-
     # ========================================================
     # ROAD CONDITION CATEGORY
     # ========================================================
@@ -297,7 +288,6 @@ for image_path, result in zip(image_files, results):
     road_condition = get_road_condition(
         road_score
     )
-
 
     # ========================================================
     # PRINT DETECTIONS
@@ -341,7 +331,6 @@ for image_path, result in zip(image_files, results):
             detection["severity"]
         )
 
-
     # ========================================================
     # PRINT ROAD RESULT
     # ========================================================
@@ -359,7 +348,6 @@ for image_path, result in zip(image_files, results):
         "Road Condition:",
         road_condition
     )
-
 
     # ========================================================
     # STORE REPORT
