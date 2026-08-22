@@ -1,11 +1,15 @@
 def calculate_severity(
+    damage_type,
     bbox,
     image_width,
-    image_height
+    image_height,
+    confidence
 ):
     """
-    Calculate severity based on the percentage
-    of image area covered by the detected damage.
+    Calculate damage severity using:
+        - Damage type
+        - Bounding-box coverage
+        - Model confidence
 
     Returns:
         severity: LOW / MEDIUM / HIGH
@@ -13,7 +17,6 @@ def calculate_severity(
     """
 
     x1, y1, x2, y2 = bbox
-
 
     # ========================================================
     # BOUNDING BOX DIMENSIONS
@@ -29,7 +32,6 @@ def calculate_severity(
         y2 - y1
     )
 
-
     # ========================================================
     # AREA CALCULATION
     # ========================================================
@@ -42,15 +44,13 @@ def calculate_severity(
         image_width * image_height
     )
 
-
     # ========================================================
     # SAFETY CHECK
     # ========================================================
 
-    if image_area == 0:
+    if image_area <= 0:
 
         return "LOW", 0.0
-
 
     # ========================================================
     # DAMAGE COVERAGE
@@ -60,16 +60,55 @@ def calculate_severity(
         box_area / image_area
     ) * 100
 
+    # ========================================================
+    # DAMAGE-SPECIFIC THRESHOLDS
+    # ========================================================
+
+    thresholds = {
+
+        "Longitudinal Crack": {
+            "medium": 3,
+            "high": 8
+        },
+
+        "Transverse Crack": {
+            "medium": 3,
+            "high": 8
+        },
+
+        "Alligator Crack": {
+            "medium": 5,
+            "high": 15
+        },
+
+        "Pothole": {
+            "medium": 3,
+            "high": 10
+        }
+
+    }
+
+    # Get thresholds for detected damage
+    damage_thresholds = thresholds.get(
+        damage_type,
+        {
+            "medium": 5,
+            "high": 15
+        }
+    )
+
+    medium_threshold = damage_thresholds["medium"]
+    high_threshold = damage_thresholds["high"]
 
     # ========================================================
-    # SEVERITY CLASSIFICATION
+    # INITIAL SEVERITY BASED ON COVERAGE
     # ========================================================
 
-    if coverage < 5:
+    if coverage < medium_threshold:
 
         severity = "LOW"
 
-    elif coverage < 15:
+    elif coverage < high_threshold:
 
         severity = "MEDIUM"
 
@@ -77,6 +116,30 @@ def calculate_severity(
 
         severity = "HIGH"
 
+    # ========================================================
+    # CONFIDENCE ADJUSTMENT
+    # ========================================================
+
+    # Very low confidence should not increase severity.
+    #
+    # We only reduce severity when confidence is weak.
+    #
+    # This prevents an uncertain detection from being
+    # classified as HIGH severity.
+
+    if confidence < 0.40:
+
+        if severity == "HIGH":
+
+            severity = "MEDIUM"
+
+        elif severity == "MEDIUM":
+
+            severity = "LOW"
+
+    # ========================================================
+    # RETURN RESULT
+    # ========================================================
 
     return severity, coverage
 
@@ -99,10 +162,10 @@ def calculate_road_condition_score(
         - Severity
         - Detection confidence
         - Damage coverage
+        - Number of detected damages
 
     detections must be a list of dictionaries.
     """
-
 
     # ========================================================
     # NO DAMAGE
@@ -111,7 +174,6 @@ def calculate_road_condition_score(
     if not detections:
 
         return 100.0
-
 
     # ========================================================
     # SEVERITY PENALTIES
@@ -127,9 +189,7 @@ def calculate_road_condition_score(
 
     }
 
-
     total_penalty = 0.0
-
 
     # ========================================================
     # PROCESS EACH DETECTION
@@ -137,17 +197,11 @@ def calculate_road_condition_score(
 
     for detection in detections:
 
-
-        # ----------------------------------------------------
-        # Get detection information
-        # ----------------------------------------------------
-
         severity = detection["severity"]
 
         coverage = detection["coverage"]
 
         confidence = detection["confidence"]
-
 
         # ----------------------------------------------------
         # Base severity penalty
@@ -158,7 +212,6 @@ def calculate_road_condition_score(
             0
         )
 
-
         # ----------------------------------------------------
         # Confidence-weighted penalty
         # ----------------------------------------------------
@@ -167,7 +220,6 @@ def calculate_road_condition_score(
             base_penalty * confidence
         )
 
-
         # ----------------------------------------------------
         # Coverage penalty
         # ----------------------------------------------------
@@ -175,7 +227,6 @@ def calculate_road_condition_score(
         coverage_penalty = (
             coverage * 0.5
         )
-
 
         # ----------------------------------------------------
         # Total penalty
@@ -186,9 +237,30 @@ def calculate_road_condition_score(
             + coverage_penalty
         )
 
-
         total_penalty += penalty
 
+    # ========================================================
+    # MULTIPLE DAMAGE PENALTY
+    # ========================================================
+
+    number_of_detections = len(
+        detections
+    )
+
+    # Additional penalty for multiple damages.
+    #
+    # First detection has no additional penalty.
+    # Every additional detection adds 2 points.
+
+    if number_of_detections > 1:
+
+        multiple_damage_penalty = (
+            number_of_detections - 1
+        ) * 2
+
+        total_penalty += (
+            multiple_damage_penalty
+        )
 
     # ========================================================
     # CALCULATE FINAL SCORE
@@ -197,7 +269,6 @@ def calculate_road_condition_score(
     score = (
         100 - total_penalty
     )
-
 
     # ========================================================
     # KEEP SCORE BETWEEN 0 AND 100
@@ -210,7 +281,6 @@ def calculate_road_condition_score(
             score
         )
     )
-
 
     return round(
         score,
