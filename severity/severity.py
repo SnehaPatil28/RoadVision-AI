@@ -1,321 +1,96 @@
-def calculate_severity(
-    damage_type,
-    bbox,
-    image_width,
-    image_height,
-    confidence
-):
+# Severity weights for each damage type
+DAMAGE_WEIGHTS = {
+    "Longitudinal Crack": 2,
+    "Transverse Crack": 2,
+    "Alligator Crack": 3,
+    "Pothole": 3,
+}
+
+# Minimum confidence considered reliable for severity calculation
+MIN_CONFIDENCE = 0.40
+
+
+def calculate_severity(detections, image_width, image_height):
     """
-    Calculate damage severity using:
-        - Damage type
-        - Bounding-box coverage
-        - Model confidence
+    Calculate road damage severity from YOLO detections.
 
-    Returns:
-        severity: LOW / MEDIUM / HIGH
-        coverage: percentage of image covered by damage
+    Each detection should contain:
+        - damage
+        - confidence
+        - bounding_box [x1, y1, x2, y2]
     """
-
-    x1, y1, x2, y2 = bbox
-
-    # ========================================================
-    # BOUNDING BOX DIMENSIONS
-    # ========================================================
-
-    box_width = max(
-        0,
-        x2 - x1
-    )
-
-    box_height = max(
-        0,
-        y2 - y1
-    )
-
-    # ========================================================
-    # AREA CALCULATION
-    # ========================================================
-
-    box_area = (
-        box_width * box_height
-    )
-
-    image_area = (
-        image_width * image_height
-    )
-
-    # ========================================================
-    # SAFETY CHECK
-    # ========================================================
-
-    if image_area <= 0:
-
-        return "LOW", 0.0
-
-    # ========================================================
-    # DAMAGE COVERAGE
-    # ========================================================
-
-    coverage = (
-        box_area / image_area
-    ) * 100
-
-    # ========================================================
-    # DAMAGE-SPECIFIC THRESHOLDS
-    # ========================================================
-
-    thresholds = {
-
-        "Longitudinal Crack": {
-            "medium": 3,
-            "high": 8
-        },
-
-        "Transverse Crack": {
-            "medium": 3,
-            "high": 8
-        },
-
-        "Alligator Crack": {
-            "medium": 5,
-            "high": 15
-        },
-
-        "Pothole": {
-            "medium": 3,
-            "high": 10
-        }
-
-    }
-
-    # Get thresholds for detected damage
-    damage_thresholds = thresholds.get(
-        damage_type,
-        {
-            "medium": 5,
-            "high": 15
-        }
-    )
-
-    medium_threshold = damage_thresholds["medium"]
-    high_threshold = damage_thresholds["high"]
-
-    # ========================================================
-    # INITIAL SEVERITY BASED ON COVERAGE
-    # ========================================================
-
-    if coverage < medium_threshold:
-
-        severity = "LOW"
-
-    elif coverage < high_threshold:
-
-        severity = "MEDIUM"
-
-    else:
-
-        severity = "HIGH"
-
-    # ========================================================
-    # CONFIDENCE ADJUSTMENT
-    # ========================================================
-
-    # Very low confidence should not increase severity.
-    #
-    # We only reduce severity when confidence is weak.
-    #
-    # This prevents an uncertain detection from being
-    # classified as HIGH severity.
-
-    if confidence < 0.40:
-
-        if severity == "HIGH":
-
-            severity = "MEDIUM"
-
-        elif severity == "MEDIUM":
-
-            severity = "LOW"
-
-    # ========================================================
-    # RETURN RESULT
-    # ========================================================
-
-    return severity, coverage
-
-
-# ============================================================
-# ROAD CONDITION SCORE
-# ============================================================
-
-def calculate_road_condition_score(
-    detections
-):
-    """
-    Calculate overall road condition score.
-
-    Score:
-        100 = Excellent
-        0   = Very Poor
-
-    The score considers:
-        - Severity
-        - Detection confidence
-        - Damage coverage
-        - Number of detected damages
-
-    detections must be a list of dictionaries.
-    """
-
-    # ========================================================
-    # NO DAMAGE
-    # ========================================================
 
     if not detections:
+        return {
+            "score": 0,
+            "level": "No Damage",
+            "reason": "No road damage detected."
+        }
 
-        return 100.0
+    image_area = image_width * image_height
 
-    # ========================================================
-    # SEVERITY PENALTIES
-    # ========================================================
-
-    severity_penalty = {
-
-        "LOW": 5,
-
-        "MEDIUM": 15,
-
-        "HIGH": 30
-
-    }
-
-    total_penalty = 0.0
-
-    # ========================================================
-    # PROCESS EACH DETECTION
-    # ========================================================
+    total_score = 0
+    valid_detections = []
 
     for detection in detections:
 
-        severity = detection["severity"]
-
-        coverage = detection["coverage"]
-
+        damage = detection["damage"]
         confidence = detection["confidence"]
+        x1, y1, x2, y2 = detection["bounding_box"]
 
-        # ----------------------------------------------------
-        # Base severity penalty
-        # ----------------------------------------------------
+        # Ignore low-confidence detections
+        if confidence < MIN_CONFIDENCE:
+            continue
 
-        base_penalty = severity_penalty.get(
-            severity,
-            0
-        )
+        # Bounding-box area
+        box_area = max(0, x2 - x1) * max(0, y2 - y1)
 
-        # ----------------------------------------------------
-        # Confidence-weighted penalty
-        # ----------------------------------------------------
+        # Percentage of image occupied by detected damage
+        area_ratio = box_area / image_area
 
-        confidence_penalty = (
-            base_penalty * confidence
-        )
+        # Damage-type weight
+        weight = DAMAGE_WEIGHTS.get(damage, 1)
 
-        # ----------------------------------------------------
-        # Coverage penalty
-        # ----------------------------------------------------
+        # Contribution of this detection
+        detection_score = weight * confidence * (1 + area_ratio)
 
-        coverage_penalty = (
-            coverage * 0.5
-        )
+        total_score += detection_score
+        valid_detections.append(detection)
 
-        # ----------------------------------------------------
-        # Total penalty
-        # ----------------------------------------------------
+    # No reliable detections
+    if not valid_detections:
+        return {
+            "score": 0,
+            "level": "No Damage",
+            "reason": "No reliable road damage detected."
+        }
 
-        penalty = (
-            confidence_penalty
-            + coverage_penalty
-        )
+    # Limit score to 10
+    severity_score = min(total_score, 10)
 
-        total_penalty += penalty
-
-    # ========================================================
-    # MULTIPLE DAMAGE PENALTY
-    # ========================================================
-
-    number_of_detections = len(
-        detections
-    )
-
-    # Additional penalty for multiple damages.
-    #
-    # First detection has no additional penalty.
-    # Every additional detection adds 2 points.
-
-    if number_of_detections > 1:
-
-        multiple_damage_penalty = (
-            number_of_detections - 1
-        ) * 2
-
-        total_penalty += (
-            multiple_damage_penalty
-        )
-
-    # ========================================================
-    # CALCULATE FINAL SCORE
-    # ========================================================
-
-    score = (
-        100 - total_penalty
-    )
-
-    # ========================================================
-    # KEEP SCORE BETWEEN 0 AND 100
-    # ========================================================
-
-    score = max(
-        0,
-        min(
-            100,
-            score
-        )
-    )
-
-    return round(
-        score,
-        2
-    )
-
-
-# ============================================================
-# ROAD CONDITION CATEGORY
-# ============================================================
-
-def get_road_condition(
-    score
-):
-    """
-    Convert numerical score into a readable
-    road-condition category.
-    """
-
-    if score >= 80:
-
-        return "Excellent"
-
-    elif score >= 60:
-
-        return "Good"
-
-    elif score >= 40:
-
-        return "Moderate"
-
-    elif score >= 20:
-
-        return "Poor"
-
+    # Convert score into severity category
+    if severity_score < 2:
+        level = "Low"
+    elif severity_score < 5:
+        level = "Moderate"
     else:
+        level = "Severe"
 
-        return "Very Poor"
+    # Count damage types
+    damage_counts = {}
+
+    for detection in valid_detections:
+        damage = detection["damage"]
+        damage_counts[damage] = damage_counts.get(damage, 0) + 1
+
+    damage_summary = ", ".join(
+        f"{count} {damage}"
+        for damage, count in damage_counts.items()
+    )
+
+    return {
+        "score": round(severity_score, 2),
+        "level": level,
+        "reason": f"{damage_summary} detected.",
+        "damage_count": len(valid_detections)
+    }
