@@ -1,0 +1,10 @@
+path: "d:/HONORS/RoadVision-AI/prepared_dataset/road_damage"
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: Longitudinal Crack
+  1: Transverse Crack
+  2: Alligator Crack
+  3: Pothole
