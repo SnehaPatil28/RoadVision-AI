@@ -30,7 +30,9 @@ MODEL_PATH = (
 CONFIDENCE_THRESHOLD = 0.10
 
 # Confidence considered reliable/confirmed.
-SEVERITY_CONFIDENCE_THRESHOLD = 0.40
+# Lowered from 0.40 → 0.25 to match severity.py MIN_CONFIDENCE,
+# so "Confirmed Damage" in the UI reflects what severity actually counts.
+SEVERITY_CONFIDENCE_THRESHOLD = 0.25
 
 
 # --------------------------------------------------

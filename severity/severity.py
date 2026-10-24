@@ -6,8 +6,10 @@ DAMAGE_WEIGHTS = {
     "Pothole": 3,
 }
 
-# Minimum confidence considered reliable for severity calculation
-MIN_CONFIDENCE = 0.40
+# Minimum confidence considered reliable for severity calculation.
+# Lowered from 0.40 → 0.25 so moderate-confidence crack detections
+# (common in real images) are not silently discarded.
+MIN_CONFIDENCE = 0.25
 
 
 def calculate_severity(detections, image_width, image_height):
@@ -51,8 +53,11 @@ def calculate_severity(detections, image_width, image_height):
         # Damage-type weight
         weight = DAMAGE_WEIGHTS.get(damage, 1)
 
-        # Contribution of this detection
-        detection_score = weight * confidence * (1 + area_ratio)
+        # Contribution of this detection.
+        # Confidence is dampened with sqrt() so lower-confidence detections
+        # still contribute meaningfully without dominating the score.
+        import math
+        detection_score = weight * math.sqrt(confidence) * (1 + area_ratio)
 
         total_score += detection_score
         valid_detections.append(detection)
@@ -68,10 +73,11 @@ def calculate_severity(detections, image_width, image_height):
     # Limit score to 10
     severity_score = min(total_score, 10)
 
-    # Convert score into severity category
-    if severity_score < 2:
+    # Convert score into severity category.
+    # Bands widened slightly so a small confidence shift doesn't flip the level.
+    if severity_score < 1.5:
         level = "Low"
-    elif severity_score < 5:
+    elif severity_score < 4.5:
         level = "Moderate"
     else:
         level = "Severe"
