@@ -17,7 +17,7 @@ from severity.severity import calculate_severity
 MODEL_PATH = (
     BASE_DIR
     / "model"
-    / "road_damage_yolo11n_best.pt"
+    / "road_damage_yolo26n_best.pt"
 )
 
 
@@ -137,9 +137,9 @@ def analyze_image(image_path):
     # ----------------------------------------------
 
     severity = calculate_severity(
-        detections=detections,
-        image_width=image_width,
-        image_height=image_height
+    detections=confirmed_detections,
+    image_width=image_width,
+    image_height=image_height
     )
 
     # ----------------------------------------------

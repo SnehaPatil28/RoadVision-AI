@@ -100,3 +100,41 @@ def calculate_severity(detections, image_width, image_height):
         "reason": f"{damage_summary} detected.",
         "damage_count": len(valid_detections)
     }
+
+
+def calculate_road_condition_score(detections):
+    """Return a percentage score from 0-100 based on detected road damage."""
+
+    if not detections:
+        return 100.0
+
+    damage_coverage = 0.0
+
+    for detection in detections:
+        if isinstance(detection, dict):
+            if "coverage" in detection:
+                damage_coverage += float(detection["coverage"])
+            elif "severity" in detection:
+                severity = detection["severity"]
+                if isinstance(severity, dict):
+                    damage_coverage += float(severity.get("score", 0.0))
+                else:
+                    damage_coverage += float(severity)
+            elif "confidence" in detection:
+                damage_coverage += float(detection["confidence"]) * 100.0
+
+    return max(0.0, 100.0 - min(100.0, damage_coverage))
+
+
+def get_road_condition(score):
+    """Convert a 0-100 condition score into a label."""
+
+    if score >= 90:
+        return "Excellent"
+    if score >= 75:
+        return "Good"
+    if score >= 55:
+        return "Fair"
+    if score >= 35:
+        return "Poor"
+    return "Critical"
